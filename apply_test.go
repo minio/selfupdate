@@ -1,4 +1,4 @@
-package update
+package selfupdate
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/inconshreveable/go-update/internal/binarydist"
+	"github.com/minio/selfupdate/internal/binarydist"
 )
 
 var (

@@ -1,6 +1,6 @@
 // +build !windows
 
-package update
+package selfupdate
 
 func hideFile(path string) error {
 	return nil

@@ -1,9 +1,9 @@
-package update
+package selfupdate
 
 import (
 	"io"
 
-	"github.com/inconshreveable/go-update/internal/binarydist"
+	"github.com/minio/selfupdate/internal/binarydist"
 )
 
 // Patcher defines an interface for applying binary patches to an old item to get an updated item.

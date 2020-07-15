@@ -1,4 +1,4 @@
-package update
+package selfupdate
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/inconshreveable/go-update/internal/osext"
+	"github.com/minio/selfupdate/internal/osext"
 )
 
 var (
