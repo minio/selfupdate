@@ -116,31 +116,14 @@ with the private key and distribute the signature along with the selfupdate.
 		"github.com/minio/selfupdate"
 	)
 
-	var publicKey = []byte(`
-	-----BEGIN PUBLIC KEY-----
-	MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEtrVmBxQvheRArXjg2vG1xIprWGuCyESx
-	MMY8pjmjepSy2kuz+nl9aFLqmr+rDNdYvEBqQaZrYMc6k29gjvoQnQ==
-	-----END PUBLIC KEY-----
-	`)
-
-	func verifiedUpdate(binary io.Reader, hexChecksum, hexSignature string) {
+	func verifiedUpdate(binary io.Reader, hexChecksum string) {
 		checksum, err := hex.DecodeString(hexChecksum)
-		if err != nil {
-			return err
-		}
-		signature, err := hex.DecodeString(hexSignature)
 		if err != nil {
 			return err
 		}
 		opts := selfupdate.Options{
 			Checksum: checksum,
-			Signature: signature,
-			Hash: crypto.SHA256, 	                 // this is the default, you don't need to specify it
-			Verifier: selfupdate.NewECDSAVerifier(),   // this is the default, you don't need to specify it
-		}
-		err = opts.SetPublicKeyPEM(publicKey)
-		if err != nil {
-			return err
+			Hash: crypto.SHA256,                // this is the default, you don't need to specify it
 		}
 		err = selfupdate.Apply(binary, opts)
 		if err != nil {

@@ -3,8 +3,6 @@ package selfupdate
 import (
 	"bytes"
 	"crypto"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -13,10 +11,6 @@ import (
 	"path/filepath"
 
 	"github.com/minio/selfupdate/internal/osext"
-)
-
-var (
-	openFile = os.OpenFile
 )
 
 // Apply performs an update of the current executable (or opts.TargetFile, if set) with the contents of the given io.Reader.
@@ -47,23 +41,8 @@ var (
 // the rollback failed by calling RollbackError, see the documentation on that function for additional detail.
 func Apply(update io.Reader, opts Options) error {
 	// validate
-	verify := false
-	switch {
-	case opts.Signature != nil && opts.PublicKey != nil:
-		// okay
-		verify = true
-	case opts.Signature != nil:
-		return errors.New("no public key to verify signature with")
-	case opts.PublicKey != nil:
-		return errors.New("No signature to verify with")
-	}
-
-	// set defaults
 	if opts.Hash == 0 {
 		opts.Hash = crypto.SHA256
-	}
-	if opts.Verifier == nil {
-		opts.Verifier = NewECDSAVerifier()
 	}
 	if opts.TargetMode == 0 {
 		opts.TargetMode = 0755
@@ -95,8 +74,8 @@ func Apply(update io.Reader, opts Options) error {
 		}
 	}
 
-	if verify {
-		if err = opts.verifySignature(newBytes); err != nil {
+	if opts.Verifier != nil {
+		if err = opts.Verifier.Verify(newBytes); err != nil {
 			return err
 		}
 	}
@@ -107,7 +86,7 @@ func Apply(update io.Reader, opts Options) error {
 
 	// Copy the contents of newbinary to a new executable file
 	newPath := filepath.Join(updateDir, fmt.Sprintf(".%s.new", filename))
-	fp, err := openFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, opts.TargetMode)
+	fp, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, opts.TargetMode)
 	if err != nil {
 		return err
 	}
@@ -204,14 +183,8 @@ type Options struct {
 	// Checksum of the new binary to verify against. If nil, no checksum or signature verification is done.
 	Checksum []byte
 
-	// Public key to use for signature verification. If nil, no signature verification is done.
-	PublicKey crypto.PublicKey
-
-	// Signature to verify the updated file. If nil, no signature verification is done.
-	Signature []byte
-
-	// Pluggable signature verification algorithm. If nil, ECDSA is used.
-	Verifier Verifier
+	// Verifier for signature verification. If nil, no signature verification is done.
+	Verifier *Verifier
 
 	// Use this hash function to generate the checksum. If not set, SHA256 is used.
 	Hash crypto.Hash
@@ -240,30 +213,13 @@ func (o *Options) CheckPermissions() error {
 
 	// attempt to open a file in the file's directory
 	newPath := filepath.Join(fileDir, fmt.Sprintf(".%s.new", fileName))
-	fp, err := openFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, o.TargetMode)
+	fp, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, o.TargetMode)
 	if err != nil {
 		return err
 	}
 	fp.Close()
 
 	_ = os.Remove(newPath)
-	return nil
-}
-
-// SetPublicKeyPEM is a convenience method to set the PublicKey property
-// used for checking a completed update's signature by parsing a
-// Public Key formatted as PEM data.
-func (o *Options) SetPublicKeyPEM(pembytes []byte) error {
-	block, _ := pem.Decode(pembytes)
-	if block == nil {
-		return errors.New("couldn't parse PEM data")
-	}
-
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return err
-	}
-	o.PublicKey = pub
 	return nil
 }
 
@@ -302,14 +258,6 @@ func (o *Options) verifyChecksum(updated []byte) error {
 		return fmt.Errorf("Updated file has wrong checksum. Expected: %x, got: %x", o.Checksum, checksum)
 	}
 	return nil
-}
-
-func (o *Options) verifySignature(updated []byte) error {
-	checksum, err := checksumFor(o.Hash, updated)
-	if err != nil {
-		return err
-	}
-	return o.Verifier.VerifySignature(checksum, o.Signature, o.Hash, o.PublicKey)
 }
 
 func checksumFor(h crypto.Hash, payload []byte) ([]byte, error) {
