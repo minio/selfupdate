@@ -30,7 +30,7 @@ type signature struct {
 	GlobalSignature    [64]byte
 }
 
-func newPublicKey(publicKeyStr string) (publicKey, error) {
+func parsePublicKey(publicKeyStr string) (publicKey, error) {
 	var pkey publicKey
 	bin, err := base64.StdEncoding.DecodeString(publicKeyStr)
 	if err != nil || len(bin) != 42 {
@@ -40,15 +40,6 @@ func newPublicKey(publicKeyStr string) (publicKey, error) {
 	copy(pkey.KeyID[:], bin[2:10])
 	copy(pkey.Key[:], bin[10:42])
 	return pkey, nil
-}
-
-func decodePublicKey(in string) (publicKey, error) {
-	var pkey publicKey
-	lines := strings.SplitN(in, "\n", 2)
-	if len(lines) < 2 {
-		return pkey, errors.New("Incomplete encoded public key")
-	}
-	return newPublicKey(lines[1])
 }
 
 func decodeSignature(in string) (signature, error) {
@@ -74,7 +65,7 @@ func decodeSignature(in string) (signature, error) {
 	return sign, nil
 }
 
-func newSignatureFromURL(url string, transport http.RoundTripper) (signature, error) {
+func parseSignatureFromURL(url string, transport http.RoundTripper) (signature, error) {
 	var sign signature
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -96,37 +87,7 @@ func newSignatureFromURL(url string, transport http.RoundTripper) (signature, er
 	return decodeSignature(string(bin))
 }
 
-func newPublicKeyFromURL(url string, transport http.RoundTripper) (publicKey, error) {
-	var pkey publicKey
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return pkey, err
-	}
-	client := &http.Client{Transport: transport}
-	resp, err := client.Do(req)
-	if err != nil {
-		return pkey, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return pkey, errors.New(resp.Status)
-	}
-	bin, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return pkey, err
-	}
-	return decodePublicKey(string(bin))
-}
-
-func newPublicKeyFromFile(file string) (publicKey, error) {
-	bin, err := ioutil.ReadFile(file)
-	if err != nil {
-		return publicKey{}, err
-	}
-	return decodePublicKey(string(bin))
-}
-
-func newSignatureFromFile(file string) (signature, error) {
+func parseSignatureFromFile(file string) (signature, error) {
 	bin, err := ioutil.ReadFile(file)
 	if err != nil {
 		return signature{}, err
@@ -134,14 +95,14 @@ func newSignatureFromFile(file string) (signature, error) {
 	return decodeSignature(string(bin))
 }
 
-func (v *Verifier) LoadFromURL(publicKeyURL, signatureURL string, transport http.RoundTripper) error {
-	pkey, err := newPublicKeyFromURL(publicKeyURL, transport)
+func (v *Verifier) LoadFromURL(signatureURL string, passphrase string, transport http.RoundTripper) error {
+	pkey, err := parsePublicKey(passphrase)
 	if err != nil {
 		return err
 	}
 	v.publicKey = pkey
 
-	sign, err := newSignatureFromURL(signatureURL, transport)
+	sign, err := parseSignatureFromURL(signatureURL, transport)
 	if err != nil {
 		return err
 	}
@@ -150,14 +111,14 @@ func (v *Verifier) LoadFromURL(publicKeyURL, signatureURL string, transport http
 	return nil
 }
 
-func (v *Verifier) LoadFromFile(publicKeyPath, signaturePath string) error {
-	pkey, err := newPublicKeyFromFile(publicKeyPath)
+func (v *Verifier) LoadFromFile(signaturePath string, passphrase string) error {
+	pkey, err := parsePublicKey(passphrase)
 	if err != nil {
 		return err
 	}
 	v.publicKey = pkey
 
-	sign, err := newSignatureFromFile(signaturePath)
+	sign, err := parseSignatureFromFile(signaturePath)
 	if err != nil {
 		return err
 	}
