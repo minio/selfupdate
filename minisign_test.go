@@ -7,7 +7,8 @@ import (
 
 func TestMinisign(t *testing.T) {
 	v := NewVerifier()
-	if err := v.LoadFromFile("test.minisig", "RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav"); err != nil {
+	err := v.LoadFromFile("LICENSE.minisig", "RWQhjNB8gjlNDQYRsRiGEzKTtGwzkcFLRMiSEy+texbTAVMvsgFLLfSr")
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -15,6 +16,7 @@ func TestMinisign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = v.Verify(buf); err != nil {
 		t.Fatal(err)
 	}
