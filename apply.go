@@ -13,33 +13,25 @@ import (
 	"github.com/minio/selfupdate/internal/osext"
 )
 
-// Apply performs an update of the current executable (or opts.TargetFile, if set) with the contents of the given io.Reader.
-//
-// Apply performs the following actions to ensure a safe cross-platform update:
-//
-// 1. If configured, applies the contents of the update io.Reader as a binary patch.
-//
-// 2. If configured, computes the checksum of the new executable and verifies it matches.
-//
-// 3. If configured, verifies the signature with a public key.
-//
-// 4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
-//
-// 5. Renames /path/to/target to /path/to/.target.old
-//
-// 6. Renames /path/to/.target.new to /path/to/target
-//
-// 7. If the final rename is successful, deletes /path/to/.target.old, returns no error. On Windows,
-// the removal of /path/to/target.old always fails, so instead Apply hides the old file instead.
-//
-// 8. If the final rename fails, attempts to roll back by renaming /path/to/.target.old
-// back to /path/to/target.
-//
-// If the roll back operation fails, the file system is left in an inconsistent state (betweet steps 5 and 6) where
-// there is no new executable file and the old executable file could not be be moved to its original location. In this
-// case you should notify the user of the bad news and ask them to recover manually. Applications can determine whether
-// the rollback failed by calling RollbackError, see the documentation on that function for additional detail.
+// Apply performs an update of the current executable or opts.TargetFile, with
+// the contents of the given io.Reader. When the update fails, it is unlikely
+// that old executable is corrupted, but still, applications need to check the
+// returned error with RollbackError() and notify the user of the bad news and
+// ask them to recover manually.
 func Apply(update io.Reader, opts Options) error {
+	err := PrepareAndCheckBinary(update, opts)
+	if err != nil {
+		return err
+	}
+	return CommitBinary(opts)
+}
+
+// PrepareAndCheckBinary reads the new binary content from io.Reader and performs the following actions:
+//   1. If configured, applies the contents of the update io.Reader as a binary patch.
+//   2. If configured, computes the checksum of the executable and verifies it matches.
+//   3. If configured, verifies the signature with a public key.
+//   4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
+func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 	// validate
 	if opts.Hash == 0 {
 		opts.Hash = crypto.SHA256
@@ -100,6 +92,27 @@ func Apply(update io.Reader, opts Options) error {
 	// if we don't call fp.Close(), windows won't let us move the new executable
 	// because the file will still be "in use"
 	fp.Close()
+	return nil
+}
+
+// CommitBinary moves the new executable to the location of the current executable or opts.TargetPath
+// if specified. It performs the following operations:
+//   1. Renames /path/to/target to /path/to/.target.old
+//   2. Renames /path/to/.target.new to /path/to/target
+//   3. If the final rename is successful, deletes /path/to/.target.old, returns no error. On Windows,
+//      the removal of /path/to/target.old always fails, so instead Apply hides the old file instead.
+//   4. If the final rename fails, attempts to roll back by renaming /path/to/.target.old
+//      back to /path/to/target.
+//
+// If the roll back operation fails, the file system is left in an inconsistent state where there is
+// no new executable file and the old executable file could not be be moved to its original location.
+// In this case you should notify the user of the bad news and ask them to recover manually. Applications
+// can determine whether the rollback failed by calling RollbackError, see the documentation on that function
+// for additional detail.
+func CommitBinary(opts Options) error {
+	updateDir := filepath.Dir(opts.TargetPath)
+	filename := filepath.Base(opts.TargetPath)
+	newPath := filepath.Join(updateDir, fmt.Sprintf(".%s.new", filename))
 
 	// this is where we'll move the executable to so that we can swap in the updated replacement
 	oldPath := opts.OldSavePath
@@ -114,7 +127,7 @@ func Apply(update io.Reader, opts Options) error {
 	_ = os.Remove(oldPath)
 
 	// move the existing executable to a new file in the same directory
-	err = os.Rename(opts.TargetPath, oldPath)
+	err := os.Rename(opts.TargetPath, oldPath)
 	if err != nil {
 		return err
 	}
