@@ -32,24 +32,15 @@ func Apply(update io.Reader, opts Options) error {
 //   3. If configured, verifies the signature with a public key.
 //   4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
 func PrepareAndCheckBinary(update io.Reader, opts Options) error {
-	// validate
-	if opts.Hash == 0 {
-		opts.Hash = crypto.SHA256
-	}
-	if opts.TargetMode == 0 {
-		opts.TargetMode = 0755
-	}
-
 	// get target path
-	var err error
-	opts.TargetPath, err = opts.getPath()
+	targetPath, err := opts.getPath()
 	if err != nil {
 		return err
 	}
 
 	var newBytes []byte
 	if opts.Patcher != nil {
-		if newBytes, err = opts.applyPatch(update); err != nil {
+		if newBytes, err = opts.applyPatch(update, targetPath); err != nil {
 			return err
 		}
 	} else {
@@ -73,12 +64,12 @@ func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 	}
 
 	// get the directory the executable exists in
-	updateDir := filepath.Dir(opts.TargetPath)
-	filename := filepath.Base(opts.TargetPath)
+	updateDir := filepath.Dir(targetPath)
+	filename := filepath.Base(targetPath)
 
 	// Copy the contents of newbinary to a new executable file
 	newPath := filepath.Join(updateDir, fmt.Sprintf(".%s.new", filename))
-	fp, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, opts.TargetMode)
+	fp, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, opts.getMode())
 	if err != nil {
 		return err
 	}
@@ -110,8 +101,14 @@ func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 // can determine whether the rollback failed by calling RollbackError, see the documentation on that function
 // for additional detail.
 func CommitBinary(opts Options) error {
-	updateDir := filepath.Dir(opts.TargetPath)
-	filename := filepath.Base(opts.TargetPath)
+	// get the directory the file exists in
+	targetPath, err := opts.getPath()
+	if err != nil {
+		return err
+	}
+
+	updateDir := filepath.Dir(targetPath)
+	filename := filepath.Base(targetPath)
 	newPath := filepath.Join(updateDir, fmt.Sprintf(".%s.new", filename))
 
 	// this is where we'll move the executable to so that we can swap in the updated replacement
@@ -127,13 +124,13 @@ func CommitBinary(opts Options) error {
 	_ = os.Remove(oldPath)
 
 	// move the existing executable to a new file in the same directory
-	err := os.Rename(opts.TargetPath, oldPath)
+	err = os.Rename(targetPath, oldPath)
 	if err != nil {
 		return err
 	}
 
 	// move the new exectuable in to become the new program
-	err = os.Rename(newPath, opts.TargetPath)
+	err = os.Rename(newPath, targetPath)
 
 	if err != nil {
 		// move unsuccessful
@@ -143,7 +140,7 @@ func CommitBinary(opts Options) error {
 		// binary to take its place. That means there is no file where the current executable binary
 		// used to be!
 		// Try to rollback by restoring the old binary to its original path.
-		rerr := os.Rename(oldPath, opts.TargetPath)
+		rerr := os.Rename(oldPath, targetPath)
 		if rerr != nil {
 			return &rollbackErr{err, rerr}
 		}
@@ -225,8 +222,8 @@ func (o *Options) CheckPermissions() error {
 	fileName := filepath.Base(path)
 
 	// attempt to open a file in the file's directory
-	newPath := filepath.Join(fileDir, fmt.Sprintf(".%s.new", fileName))
-	fp, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, o.TargetMode)
+	newPath := filepath.Join(fileDir, fmt.Sprintf(".%s.check-perm", fileName))
+	fp, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, o.getMode())
 	if err != nil {
 		return err
 	}
@@ -244,9 +241,23 @@ func (o *Options) getPath() (string, error) {
 	}
 }
 
-func (o *Options) applyPatch(patch io.Reader) ([]byte, error) {
+func (o *Options) getMode() os.FileMode {
+	if o.TargetMode == 0 {
+		return 0755
+	}
+	return o.TargetMode
+}
+
+func (o *Options) getHash() crypto.Hash {
+	if o.Hash == 0 {
+		o.Hash = crypto.SHA256
+	}
+	return o.Hash
+}
+
+func (o *Options) applyPatch(patch io.Reader, targetPath string) ([]byte, error) {
 	// open the file to patch
-	old, err := os.Open(o.TargetPath)
+	old, err := os.Open(targetPath)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +273,7 @@ func (o *Options) applyPatch(patch io.Reader) ([]byte, error) {
 }
 
 func (o *Options) verifyChecksum(updated []byte) error {
-	checksum, err := checksumFor(o.Hash, updated)
+	checksum, err := checksumFor(o.getHash(), updated)
 	if err != nil {
 		return err
 	}
