@@ -1,137 +1,61 @@
 package selfupdate
 
-// Borrowed code directly from https://github.com/jedisct1/go-minisign
-// however modified to support reading signatures from remote URLs,
-// local file etc.
 import (
-	"encoding/base64"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"strings"
 
-	"golang.org/x/crypto/blake2b"
-	"golang.org/x/crypto/ed25519"
+	"aead.dev/minisign"
 )
 
 type Verifier struct {
-	publicKey publicKey
-	signature signature
-}
-
-type publicKey struct {
-	SignatureAlgorithm [2]byte
-	KeyID              [8]byte
-	Key                [32]byte
-}
-
-type signature struct {
-	UntrustedComment   string
-	SignatureAlgorithm [2]byte
-	KeyID              [8]byte
-	Signature          [64]byte
-	TrustedComment     string
-	GlobalSignature    [64]byte
-}
-
-func parsePublicKey(publicKeyStr string) (publicKey, error) {
-	var pkey publicKey
-	bin, err := base64.StdEncoding.DecodeString(publicKeyStr)
-	if err != nil || len(bin) != 42 {
-		return pkey, errors.New("Invalid encoded public key")
-	}
-	copy(pkey.SignatureAlgorithm[:], bin[0:2])
-	copy(pkey.KeyID[:], bin[2:10])
-	copy(pkey.Key[:], bin[10:42])
-	return pkey, nil
-}
-
-func trimCarriageReturn(input string) string {
-	return strings.TrimRight(input, "\r")
-}
-
-func decodeSignature(in string) (signature, error) {
-	var sign signature
-	lines := strings.SplitN(in, "\n", 4)
-	if len(lines) < 4 {
-		return sign, errors.New("Incomplete encoded signature")
-	}
-	sign.UntrustedComment = trimCarriageReturn(lines[0])
-	bin1, err := base64.StdEncoding.DecodeString(lines[1])
-	if err != nil || len(bin1) != 74 {
-		return sign, errors.New("Invalid encoded signature")
-	}
-	sign.TrustedComment = trimCarriageReturn(lines[2])
-	bin2, err := base64.StdEncoding.DecodeString(lines[3])
-	if err != nil || len(bin2) != 64 {
-		return sign, errors.New("Invalid encoded signature")
-	}
-	copy(sign.SignatureAlgorithm[:], bin1[0:2])
-	copy(sign.KeyID[:], bin1[2:10])
-	copy(sign.Signature[:], bin1[10:74])
-	copy(sign.GlobalSignature[:], bin2)
-	return sign, nil
-}
-
-func parseSignatureFromURL(url string, transport http.RoundTripper) (signature, error) {
-	var sign signature
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return sign, err
-	}
-	client := &http.Client{Transport: transport}
-	resp, err := client.Do(req)
-	if err != nil {
-		return sign, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return sign, errors.New(resp.Status)
-	}
-	bin, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return sign, err
-	}
-	return decodeSignature(string(bin))
-}
-
-func parseSignatureFromFile(file string) (signature, error) {
-	bin, err := ioutil.ReadFile(file)
-	if err != nil {
-		return signature{}, err
-	}
-	return decodeSignature(string(bin))
+	publicKey minisign.PublicKey
+	signature minisign.Signature
 }
 
 func (v *Verifier) LoadFromURL(signatureURL string, passphrase string, transport http.RoundTripper) error {
-	pkey, err := parsePublicKey(passphrase)
-	if err != nil {
-		return err
-	}
-	v.publicKey = pkey
-
-	sign, err := parseSignatureFromURL(signatureURL, transport)
-	if err != nil {
+	var publicKey minisign.PublicKey
+	if err := publicKey.UnmarshalText([]byte(passphrase)); err != nil {
 		return err
 	}
 
-	v.signature = sign
+	client := &http.Client{Transport: transport}
+	req, err := http.NewRequest(http.MethodGet, signatureURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(resp.Status)
+	}
+
+	const MaxSize = 1 << 20
+	b, err := io.ReadAll(io.LimitReader(resp.Body, MaxSize))
+	if err != nil {
+		return err
+	}
+	var signature minisign.Signature
+	if err = signature.UnmarshalText(b); err != nil {
+		return err
+	}
+	v.publicKey, v.signature = publicKey, signature
 	return nil
 }
 
 func (v *Verifier) LoadFromFile(signaturePath string, passphrase string) error {
-	pkey, err := parsePublicKey(passphrase)
+	var publicKey minisign.PublicKey
+	if err := publicKey.UnmarshalText([]byte(passphrase)); err != nil {
+		return err
+	}
+	signature, err := minisign.SignatureFromFile(signaturePath)
 	if err != nil {
 		return err
 	}
-	v.publicKey = pkey
-
-	sign, err := parseSignatureFromFile(signaturePath)
-	if err != nil {
-		return err
-	}
-
-	v.signature = sign
+	v.publicKey, v.signature = publicKey, signature
 	return nil
 }
 
@@ -140,36 +64,12 @@ func NewVerifier() *Verifier {
 }
 
 func (v *Verifier) Verify(bin []byte) error {
-	if v.publicKey.SignatureAlgorithm != [2]byte{'E', 'd'} {
-		return errors.New("Incompatible signature algorithm")
+	signature, err := v.signature.MarshalText()
+	if err != nil {
+		return err
 	}
-	prehashed := false
-	if v.signature.SignatureAlgorithm[0] == 0x45 && v.signature.SignatureAlgorithm[1] == 0x64 {
-		prehashed = false
-	} else if v.signature.SignatureAlgorithm[0] == 0x45 && v.signature.SignatureAlgorithm[1] == 0x44 {
-		prehashed = true
-	} else {
-		return errors.New("Unsupported signature algorithm")
-	}
-	if v.publicKey.KeyID != v.signature.KeyID {
-		return errors.New("Incompatible key identifiers")
-	}
-	if !strings.HasPrefix(v.signature.TrustedComment, "trusted comment: ") {
-		return errors.New("Unexpected format for the trusted comment")
-	}
-	if prehashed {
-		h, _ := blake2b.New512(nil)
-		h.Write(bin)
-		bin = h.Sum(nil)
-	}
-	if !ed25519.Verify(ed25519.PublicKey(v.publicKey.Key[:]), bin, v.signature.Signature[:]) {
-		return errors.New("Invalid signature")
-	}
-	if !ed25519.Verify(ed25519.PublicKey(v.publicKey.Key[:]),
-		append(v.signature.Signature[:],
-			[]byte(v.signature.TrustedComment)[17:]...),
-		v.signature.GlobalSignature[:]) {
-		return errors.New("Invalid global signature")
+	if !minisign.Verify(v.publicKey, bin, signature) {
+		return errors.New("selfupdate: signature verification failed")
 	}
 	return nil
 }
