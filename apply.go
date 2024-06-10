@@ -27,10 +27,10 @@ func Apply(update io.Reader, opts Options) error {
 }
 
 // PrepareAndCheckBinary reads the new binary content from io.Reader and performs the following actions:
-//   1. If configured, applies the contents of the update io.Reader as a binary patch.
-//   2. If configured, computes the checksum of the executable and verifies it matches.
-//   3. If configured, verifies the signature with a public key.
-//   4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
+//  1. If configured, applies the contents of the update io.Reader as a binary patch.
+//  2. If configured, computes the checksum of the executable and verifies it matches.
+//  3. If configured, verifies the signature with a public key.
+//  4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
 func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 	// get target path
 	targetPath, err := opts.getPath()
@@ -88,12 +88,12 @@ func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 
 // CommitBinary moves the new executable to the location of the current executable or opts.TargetPath
 // if specified. It performs the following operations:
-//   1. Renames /path/to/target to /path/to/.target.old
-//   2. Renames /path/to/.target.new to /path/to/target
-//   3. If the final rename is successful, deletes /path/to/.target.old, returns no error. On Windows,
-//      the removal of /path/to/target.old always fails, so instead Apply hides the old file instead.
-//   4. If the final rename fails, attempts to roll back by renaming /path/to/.target.old
-//      back to /path/to/target.
+//  1. Renames /path/to/target to /path/to/.target.old
+//  2. Renames /path/to/.target.new to /path/to/target
+//  3. If the final rename is successful, deletes /path/to/.target.old, returns no error. On Windows,
+//     the removal of /path/to/target.old always fails, so instead Apply hides the old file instead.
+//  4. If the final rename fails, attempts to roll back by renaming /path/to/.target.old
+//     back to /path/to/target.
 //
 // If the roll back operation fails, the file system is left in an inconsistent state where there is
 // no new executable file and the old executable file could not be be moved to its original location.
@@ -125,7 +125,7 @@ func CommitBinary(opts Options) error {
 
 	// move the existing executable to a new file in the same directory
 	err = os.Rename(targetPath, oldPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
