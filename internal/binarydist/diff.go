@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"io/ioutil"
 )
 
 func swap(a []int, i, j int) { a[i], a[j] = a[j], a[i] }
@@ -181,12 +180,12 @@ func search(I []int, obuf, nbuf []byte, st, en int) (pos, n int) {
 // Diff computes the difference between old and new, according to the bsdiff
 // algorithm, and writes the result to patch.
 func Diff(old, new io.Reader, patch io.Writer) error {
-	obuf, err := ioutil.ReadAll(old)
+	obuf, err := io.ReadAll(old)
 	if err != nil {
 		return err
 	}
 
-	nbuf, err := ioutil.ReadAll(new)
+	nbuf, err := io.ReadAll(new)
 	if err != nil {
 		return err
 	}

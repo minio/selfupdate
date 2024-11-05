@@ -3,7 +3,6 @@ package binarydist
 import (
 	"crypto/rand"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -17,7 +16,7 @@ func mustOpen(path string) *os.File {
 }
 
 func mustReadAll(r io.Reader) []byte {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		panic(err)
 	}
@@ -49,12 +48,12 @@ func fileCmp(a, b *os.File) int64 {
 		panic(err)
 	}
 
-	pa, err := ioutil.ReadAll(a)
+	pa, err := io.ReadAll(a)
 	if err != nil {
 		panic(err)
 	}
 
-	pb, err := ioutil.ReadAll(b)
+	pb, err := io.ReadAll(b)
 	if err != nil {
 		panic(err)
 	}

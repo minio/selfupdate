@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"io/ioutil"
 )
 
 var ErrCorrupt = errors.New("corrupt patch")
@@ -43,7 +42,7 @@ func Patch(old io.Reader, new io.Writer, patch io.Reader) error {
 	// The entire rest of the file is the extra block.
 	epfbz2 := bzip2.NewReader(patch)
 
-	obuf, err := ioutil.ReadAll(old)
+	obuf, err := io.ReadAll(old)
 	if err != nil {
 		return err
 	}

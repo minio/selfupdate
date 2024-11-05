@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -28,7 +27,7 @@ func cleanup(path string) {
 
 // we write with a separate name for each test so that we can run them in parallel
 func writeOldFile(path string, t *testing.T) {
-	if err := ioutil.WriteFile(path, oldFile, 0777); err != nil {
+	if err := os.WriteFile(path, oldFile, 0o777); err != nil {
 		t.Fatalf("Failed to write file for testing preparation: %v", err)
 	}
 }
@@ -38,7 +37,7 @@ func validateUpdate(path string, err error, t *testing.T) {
 		t.Fatalf("Failed to update: %v", err)
 	}
 
-	buf, err := ioutil.ReadFile(path)
+	buf, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("Failed to read file post-update: %v", err)
 	}
@@ -129,7 +128,58 @@ func TestCorruptPatch(t *testing.T) {
 	defer cleanup(fName)
 	writeOldFile(fName, t)
 
-	badPatch := []byte{0x44, 0x38, 0x86, 0x3c, 0x4f, 0x8d, 0x26, 0x54, 0xb, 0x11, 0xce, 0xfe, 0xc1, 0xc0, 0xf8, 0x31, 0x38, 0xa0, 0x12, 0x1a, 0xa2, 0x57, 0x2a, 0xe1, 0x3a, 0x48, 0x62, 0x40, 0x2b, 0x81, 0x12, 0xb1, 0x21, 0xa5, 0x16, 0xed, 0x73, 0xd6, 0x54, 0x84, 0x29, 0xa6, 0xd6, 0xb2, 0x1b, 0xfb, 0xe6, 0xbe, 0x7b, 0x70}
+	badPatch := []byte{
+		0x44,
+		0x38,
+		0x86,
+		0x3c,
+		0x4f,
+		0x8d,
+		0x26,
+		0x54,
+		0xb,
+		0x11,
+		0xce,
+		0xfe,
+		0xc1,
+		0xc0,
+		0xf8,
+		0x31,
+		0x38,
+		0xa0,
+		0x12,
+		0x1a,
+		0xa2,
+		0x57,
+		0x2a,
+		0xe1,
+		0x3a,
+		0x48,
+		0x62,
+		0x40,
+		0x2b,
+		0x81,
+		0x12,
+		0xb1,
+		0x21,
+		0xa5,
+		0x16,
+		0xed,
+		0x73,
+		0xd6,
+		0x54,
+		0x84,
+		0x29,
+		0xa6,
+		0xd6,
+		0xb2,
+		0x1b,
+		0xfb,
+		0xe6,
+		0xbe,
+		0x7b,
+		0x70,
+	}
 	err := Apply(bytes.NewReader(badPatch), Options{
 		TargetPath: fName,
 		Patcher:    NewBSDiffPatcher(),
@@ -228,7 +278,12 @@ func signrsa(privatePEM string, source []byte, t *testing.T) []byte {
 	return sign(parseFn, privatePEM, source, t)
 }
 
-func sign(parsePrivKey func([]byte) (crypto.Signer, error), privatePEM string, source []byte, t *testing.T) []byte {
+func sign(
+	parsePrivKey func([]byte) (crypto.Signer, error),
+	privatePEM string,
+	source []byte,
+	t *testing.T,
+) []byte {
 	block, _ := pem.Decode([]byte(privatePEM))
 	if block == nil {
 		t.Fatalf("Failed to parse private key PEM")
