@@ -27,10 +27,10 @@ func Apply(update io.Reader, opts Options) error {
 }
 
 // PrepareAndCheckBinary reads the new binary content from io.Reader and performs the following actions:
-//   1. If configured, applies the contents of the update io.Reader as a binary patch.
-//   2. If configured, computes the checksum of the executable and verifies it matches.
-//   3. If configured, verifies the signature with a public key.
-//   4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
+//  1. If configured, applies the contents of the update io.Reader as a binary patch.
+//  2. If configured, computes the checksum of the executable and verifies it matches.
+//  3. If configured, verifies the signature with a public key.
+//  4. Creates a new file, /path/to/.target.new with the TargetMode with the contents of the updated file
 func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 	// get target path
 	targetPath, err := opts.getPath()
@@ -88,12 +88,12 @@ func PrepareAndCheckBinary(update io.Reader, opts Options) error {
 
 // CommitBinary moves the new executable to the location of the current executable or opts.TargetPath
 // if specified. It performs the following operations:
-//   1. Renames /path/to/target to /path/to/.target.old
-//   2. Renames /path/to/.target.new to /path/to/target
-//   3. If the final rename is successful, deletes /path/to/.target.old, returns no error. On Windows,
-//      the removal of /path/to/target.old always fails, so instead Apply hides the old file instead.
-//   4. If the final rename fails, attempts to roll back by renaming /path/to/.target.old
-//      back to /path/to/target.
+//  1. Renames /path/to/target to /path/to/.target.old
+//  2. Renames /path/to/.target.new to /path/to/target
+//  3. If the final rename is successful, deletes /path/to/.target.old, returns no error. On Windows,
+//     the removal of /path/to/target.old always fails, so instead Apply hides the old file instead.
+//  4. If the final rename fails, attempts to roll back by renaming /path/to/.target.old
+//     back to /path/to/target.
 //
 // If the roll back operation fails, the file system is left in an inconsistent state where there is
 // no new executable file and the old executable file could not be be moved to its original location.
@@ -233,12 +233,40 @@ func (o *Options) CheckPermissions() error {
 	return nil
 }
 
+// normalizeExecutablePath handles the case where os.Executable() returns a path
+// ending with .old (which can happen after a previous update on some systems).
+// It strips the .old suffix and any leading dot from the base filename.
+//
+// Examples:
+//   - /path/to/.minio.old -> /path/to/minio
+//   - /path/to/program.old -> /path/to/program
+//   - /path/to/program -> /path/to/program (unchanged)
+func normalizeExecutablePath(path string) string {
+	path = filepath.Clean(path)
+	baseFilename := filepath.Base(path)
+
+	// Handle case where the executable path ends with .old
+	if filepath.Ext(baseFilename) == ".old" {
+		baseFilename = baseFilename[:len(baseFilename)-4] // Remove .old suffix
+		// Remove leading dot if present (e.g., ".minio.old" -> "minio")
+		if len(baseFilename) > 1 && baseFilename[0] == '.' {
+			baseFilename = baseFilename[1:]
+		}
+		path = filepath.Join(filepath.Dir(path), baseFilename)
+	}
+
+	return path
+}
+
 func (o *Options) getPath() (string, error) {
 	if o.TargetPath == "" {
-		return osext.Executable()
-	} else {
-		return o.TargetPath, nil
+		path, err := osext.Executable()
+		if err != nil {
+			return "", err
+		}
+		return normalizeExecutablePath(path), nil
 	}
+	return o.TargetPath, nil
 }
 
 func (o *Options) getMode() os.FileMode {

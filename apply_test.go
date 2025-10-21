@@ -247,3 +247,61 @@ func sign(parsePrivKey func([]byte) (crypto.Signer, error), privatePEM string, s
 
 	return sig
 }
+
+func TestNormalizeExecutablePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "normal path unchanged",
+			input:    "/path/to/program",
+			expected: "/path/to/program",
+		},
+		{
+			name:     "path with .old suffix",
+			input:    "/path/to/program.old",
+			expected: "/path/to/program",
+		},
+		{
+			name:     "path with leading dot and .old suffix",
+			input:    "/path/to/.minio.old",
+			expected: "/path/to/minio",
+		},
+		{
+			name:     "path with leading dot and .old suffix (complex)",
+			input:    "/usr/local/bin/.server.old",
+			expected: "/usr/local/bin/server",
+		},
+		{
+			name:     "simple filename with .old",
+			input:    "program.old",
+			expected: "program",
+		},
+		{
+			name:     "simple filename with leading dot and .old",
+			input:    ".program.old",
+			expected: "program",
+		},
+		{
+			name:     "path with multiple dots but not .old extension",
+			input:    "/path/to/my.program.exe",
+			expected: "/path/to/my.program.exe",
+		},
+		{
+			name:     "windows style path with .old",
+			input:    "C:\\Program Files\\app.exe.old",
+			expected: "C:\\Program Files\\app.exe",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeExecutablePath(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeExecutablePath(%q) = %q, expected %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
