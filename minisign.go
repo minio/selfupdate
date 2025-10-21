@@ -59,6 +59,20 @@ func (v *Verifier) LoadFromFile(signaturePath string, passphrase string) error {
 	return nil
 }
 
+func (v *Verifier) Load(signatureBytes []byte, passphraseBytes []byte) error {
+	var publicKey minisign.PublicKey
+	if err := publicKey.UnmarshalText(passphraseBytes); err != nil {
+		return err
+	}
+	var signature minisign.Signature
+	if err := signature.UnmarshalText(signatureBytes); err != nil {
+		return err
+	}
+	v.publicKey, v.signature = publicKey, signature
+	return nil
+
+}
+
 func NewVerifier() *Verifier {
 	return &Verifier{}
 }
