@@ -125,7 +125,7 @@ func CommitBinary(opts Options) error {
 
 	// move the existing executable to a new file in the same directory
 	err = os.Rename(targetPath, oldPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
