@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/minio/selfupdate/internal/osext"
+	"github.com/vvair/selfupdate/internal/osext"
 )
 
 // Apply performs an update of the current executable or opts.TargetFile, with
@@ -124,8 +124,9 @@ func CommitBinary(opts Options) error {
 	_ = os.Remove(oldPath)
 
 	// move the existing executable to a new file in the same directory
+	// skip backup if the target file does not exist.
 	err = os.Rename(targetPath, oldPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
