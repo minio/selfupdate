@@ -1,4 +1,4 @@
-module github.com/minio/selfupdate
+module github.com/vvair/selfupdate
 
 go 1.24.0
 
