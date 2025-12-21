@@ -18,7 +18,7 @@ import (
     "fmt"
     "net/http"
 
-    "github.com/minio/selfupdate"
+    "github.com/vvair/selfupdate"
 )
 
 func doUpdate(url string) error {

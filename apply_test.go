@@ -12,7 +12,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/minio/selfupdate/internal/binarydist"
+	"github.com/vvair/selfupdate/internal/binarydist"
 )
 
 var (

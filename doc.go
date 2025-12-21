@@ -11,7 +11,7 @@ This example shows how to update a program remotely from a URL.
 		"fmt"
 		"net/http"
 
-		"github.com/minio/selfupdate"
+		"github.com/vvair/selfupdate"
 	)
 
 	func doUpdate(url string) error {
@@ -42,7 +42,7 @@ may be applied by implementing the Patcher interface.
 		"encoding/hex"
 		"io"
 
-		"github.com/minio/selfupdate"
+		"github.com/vvair/selfupdate"
 	)
 
 	func updateWithPatch(patch io.Reader) error {
@@ -75,7 +75,7 @@ specified as a hex string.
 		"encoding/hex"
 		"io"
 
-		"github.com/minio/selfupdate"
+		"github.com/vvair/selfupdate"
 	)
 
 	func updateWithChecksum(binary io.Reader, hexChecksum string) error {
@@ -112,7 +112,7 @@ with the private key and distribute the signature along with the selfupdate.
 		"encoding/hex"
 		"io"
 
-		"github.com/minio/selfupdate"
+		"github.com/vvair/selfupdate"
 	)
 
 	func verifiedUpdate(binary io.Reader, hexChecksum string) {
